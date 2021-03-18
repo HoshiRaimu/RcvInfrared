@@ -50,6 +50,8 @@ void    i2cProtocolStop(void);         // ストップビット生成
 void    i2cProtocolSendData(uint8_t);  // 1バイトデータ送信
 uint8_t i2cProtocolCheckAck(void);     // ACK信号チェック
 
+void dispInt(uint8_t, uint8_t, uint8_t);
+
 void main(void) {
     //PICマイコンの設定
     OSCCON = 0b01101000;
@@ -57,7 +59,7 @@ void main(void) {
     TRISA  = 0b00110110;    //RA1とRA2とRA4とRA5を入力に設定
     
     //Timer1の設定
-    T1CON = 0b00000000;      //命令クロックを選択、プリスケール値1:1 、Timer1を停止
+    T1CON   = 0b00000000;      //命令クロックを選択、プリスケール値1:1 、Timer1を停止
     TMR1IE  = 0;             // Timer1 オーバーフロー割り込みを無効
     
     //I2Cの設定
@@ -73,6 +75,7 @@ void main(void) {
     lcdInitialize();
     
     uint8_t rcv_data[4] = {0, 0, 0, 0};
+    uint8_t NorA = 0;
     
     while(1){
         if(RA4) {
@@ -89,44 +92,83 @@ void main(void) {
             TMR1L  = 0;
             TMR1ON = 1;
             while(!RA5);
+            TMR1ON = 0;
             
-            if((TMR1H >= 0x1F) && (TMR1H <= 0x27)) {    //HIGHの時間が8ms-10.0msをNECフォーマットと判断
-                //LOWになるのを待つ
-                while(RA5);
+            if(TMR1H >= 0x1F) {    //HIGHの時間が8ms-10.0msをNECフォーマットと判断
+                NorA = 1;
+            }else {
+                NorA = 0;
+            }
                 
-                for(int i = 0; i < 4; i++) {
-                    for(int j = 7; j >= 0; j++) {
-                        //HIGHの時間つぶし
-                        while(!RA5);
-                        
-                        //LOWの時間を測定
-                        TMR1H  = 0;
-                        TMR1L  = 0;
-                        TMR1ON = 1;
-                        while(RA5);
-                        
-                        //LOWの時間が0x04よりも長ければ1と判断
-                        if(TMR1H >= 0x04) {
-                            rcv_data[i] = rcv_data[i] | (uint8_t)(0b00000001 << j);
-                        }
+            //LOWになるのを待つ
+            while(RA5);
+
+            for(int i = 0; i < 4; i++) {
+                rcv_data[i] = 0;
+                for(int j = 7; j >= 0; j--) {
+                    //HIGHの時間つぶし
+                    while(!RA5);
+
+                    //LOWの時間を測定
+                    TMR1H  = 0;
+                    TMR1L  = 0;
+                    TMR1ON = 1;
+                    while(RA5);
+                    TMR1ON = 0;
+
+                    //LOWの時間が0x04よりも長ければ1と判断
+                    if(TMR1H >= 0x04) {
+                        rcv_data[i] = rcv_data[i] | (uint8_t)(0b00000001 << j);
                     }
                 }
-                TMR1ON = 0;
-                LATA0 = 0; 
             }
-            
-     
+            TMR1ON = 0;
+            LATA0 = 0; 
         }
         
-        lcdLocateCursor(1, 1);
-        lcdSendCharacterData((uint8_t)(rcv_data[0] | 0b00110000));
-        lcdLocateCursor(2, 1);
-        lcdSendCharacterData((uint8_t)(rcv_data[1] | 0b00110000));
-        lcdLocateCursor(3, 1);
-        lcdSendCharacterData(rcv_data[2] | 0b00110000);
-        lcdLocateCursor(4, 1);
-        lcdSendCharacterData(rcv_data[3] | 0b00110000);  
+        if(NorA) {
+            lcdLocateCursor(8, 1);
+            lcdSendCharacterData('N');
+        }else {
+            lcdLocateCursor(8, 1);
+            lcdSendCharacterData('A');
+        }
+        
+        dispInt(1, 1, rcv_data[0]);
+        dispInt(5, 1, rcv_data[1]);
+        dispInt(1, 2, rcv_data[2]);
+        dispInt(5, 2, rcv_data[3]);
     }
+
+    return;
+}
+
+void dispInt(uint8_t pos_x, uint8_t pos_y, uint8_t data) {
+    uint8_t data1, data2;
+    
+    data1 = (data & 0b11110000) >> 4;
+    data2 = data & 0b00001111;
+    
+    lcdLocateCursor(pos_x, pos_y);
+    if(data1 >= 0 && data1 <= 9) {
+        data1 |= 0b00110000;
+        lcdSendCharacterData(data1);
+    }else {
+        data1 -= 9;
+        data1 |= 0b01000000;
+        lcdSendCharacterData(data1);
+    }
+    
+    lcdLocateCursor(pos_x + 1, pos_y);
+    if(data2 >= 0 && data2 <= 9) {
+        data2 |= 0b00110000;
+        lcdSendCharacterData(data2);
+    }else {
+        data2 -= 9;
+        data2 |= 0b01000000;
+        lcdSendCharacterData(data2);
+    }
+    
     return;
 }
 
