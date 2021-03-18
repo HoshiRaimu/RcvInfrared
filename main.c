@@ -50,6 +50,7 @@ void    i2cProtocolStop(void);         // ストップビット生成
 void    i2cProtocolSendData(uint8_t);  // 1バイトデータ送信
 uint8_t i2cProtocolCheckAck(void);     // ACK信号チェック
 
+//LCDに16進数で整数を表示
 void dispInt(uint8_t, uint8_t, uint8_t);
 
 void main(void) {
@@ -146,9 +147,12 @@ void main(void) {
 void dispInt(uint8_t pos_x, uint8_t pos_y, uint8_t data) {
     uint8_t data1, data2;
     
+    //16進数表記にするために上位4ビットと下位4ビットを取り出す
     data1 = (data & 0b11110000) >> 4;
     data2 = data & 0b00001111;
     
+    //0から9のときとAからFのときの場合分け
+    //上位4ビットの表示
     lcdLocateCursor(pos_x, pos_y);
     if(data1 >= 0 && data1 <= 9) {
         data1 |= 0b00110000;
@@ -159,6 +163,7 @@ void dispInt(uint8_t pos_x, uint8_t pos_y, uint8_t data) {
         lcdSendCharacterData(data1);
     }
     
+    //下位4ビットの表示
     lcdLocateCursor(pos_x + 1, pos_y);
     if(data2 >= 0 && data2 <= 9) {
         data2 |= 0b00110000;
